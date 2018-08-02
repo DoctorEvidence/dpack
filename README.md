@@ -9,7 +9,7 @@ dpack is a very compact binary format for serializing data structures, designed 
 * Optimized to compress well with Huffman/Gzip encoding schemes
 
 This repository is for the specification of dpack. For dpack libraries:
-* A (JavaScript implementation)[https://github.com/DoctorEvidence/dpackjs]
+* [JavaScript implementation](https://github.com/DoctorEvidence/dpackjs)
 
 # Specification
 dpack is designed for ease of creating high performance implementations, making it easy to use fast bitwise operators, and memory-limited structures. While the dpack messages may appear somewhat complicated description, it is intended to be easily implemented, particularly with typed languages, to be flexible, and to provide protection against excessive memory consumption.
