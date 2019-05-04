@@ -37,12 +37,31 @@ Character "!D": Code points 33 and 68. Binary representation:
 `0 0 1 0 0 0 0 1   0 1 0 0 0 1 0 0` - Stop bit is not set (0), type (1 0) is 2, bits (0 0 0 1) will be combined with next byte. Next byte, stop bit is set. Combined bits (0 0 0 1  0 0 0 1 0 0) make 68 the accompanying number, producing token <2, 68>.
 
 Character "4": Code point 52. Binary representation:
+
 `0 0 1 1 0 1 0 0` - Stop bit is not set (0), type (1 1) is 3. However, this is the special case of type 3 and no stop bit so it is treated as type 7 (stopped), and accompanying number (0 1 0 0) is 4, producing token <7, 4>.
 
 ### Limits
 There may be up to 8 bytes, which accomodates up to 46 bits for the accompanying number, therefore the accompanying number must be an unsigned integers under 2^46.
 
 Some types will use the accompanying number to specify the length of a string immediately following the token. When a string is to be read, the number specifies the number of characters to be including in the string, after which the next block can be immediately read. The length of the string is not bytes, but basic multiplane characters. Any supplemental plane should be counted as two characters (surrogates) should be counted as two characters (a pair). In other words, a string length is defined by its UTF-16 encoding (though it may be serialized in UTF-8 in dpack).
+
+
+### Code
+
+This format is designed to be easily parsed with very simple and efficient code. Using standard C/C++/Java/C#/JS/TS syntax, type and number pairs can be lexed efficiently from characters/bytes with just a few lines of code:
+```
+token = dpackSource[position++] // read first character/byte
+if (token >= 48) { // single byte token
+	type = (token >>> 4) ^ 4; // shift and xor gives us the type
+	number = token & 15; // last 4 bits is the number
+} else { // multiple byte token
+	type = (token >>> 4) & 11; // shift and omit the stop bit (bit 3)
+	number = token & 15; // last 4 bits is high bits of number
+	do {
+		token = dpackSource[position++]; // get next byte
+		number = (number << 6) + (token & 63); // progressively shift the number for big endian numbers
+	} while (token < 64); // until a stop bit
+```
 
 ### Alternate Encodings
 Tokens may also consist of higher character codes and a compliant parser should also be to parse characters that extend beyond unicode 127. For characters with code points 128 and above, the character code point should be interpreted as a 16-bit unsigned integer, with the first bit always as 0, the second bit as a stop bit, the third and fourth bit as type bits, and the remaining 12 bits for the accompanying number. These 16-bit character encoding/decodings can be used for greater efficiency where UTF-16 encoding is preferred (which can be faster in languages that internally represent strings with UTF-16, and there is relatively unlimited socket bandwidth, such as interprocess pipes).
@@ -60,34 +79,35 @@ The accompanying number indicates the number of following characters that compos
 This type code is used to define properties and special values. The accompanying number is used to determine the value or property to create. This is the definition of the accompanying number follows:
 
 The first four accompanying number codes are for defining special constant values, and should be converted to these values:
-0 - null (null, NIL, or NULL depending on language)
-1 - undefined (used as value to indicate a property should be omitted)
-2 - true
-3 - false
+* 0 ("p") - null (null, NIL, or NULL depending on language)
+* 1 ("q") - undefined (used as value to indicate a property should be omitted)
+* 2 ("r") - true
+* 3 ("s") - false
 
 The next two provide parsing directives:
-4 - Deferred Reference
-5 - End Sequence - this token indicates the end of an open sequence (see sequences below)
+* 4 ("t") - Deferred Reference
+* 5 ("u") - End Sequence - this token indicates the end of an open sequence (see sequences below)
 
 For all the remaining codes, the parser needs to read the next value after this token as the parameter for the property that is being created or modified.
 The next five codes are used indicate the creation of a property, the next value after this token is the *key* that is associated with this property. The codes below indicate which property type to be created (and each type defines how the rudimentary values are converted to final values).
-6 - Default property type
-7 - Array property type
-8 - Referencing property type
-9 - Numeric property type
-10 - Reserved for extensions
-11 - Reserved for extensions
+* 6 ("v") - Default property type
+* 7 ("w") - Array property type
+* 8 ("x") - Referencing property type
+* 9 ("y") - Numeric property type
+* 10 ("z") - Reserved for extensions
+* 11 ("{") - Reserved for extensions
 
 The next four codes are used indicate modification of the current property. Again, the parser should read the next value, as the parameter for the property modification. This may be used to modify a previously defined property, providing additional information about the property:
-11 - Metadata - Provides metadata for a property, like a class that should be used for value instances.
-12 - Referencing position - This can be used with a Referencing property type, to reset the current index into the set of referenceable values. The parameter should be a number to indicate the index position.
+12 ("|") - Metadata - Provides metadata for a property, like a class that should be used for value instances.
+13 ("}") - Referencing position - This can be used with a Referencing property type, to reset the current index into the set of referenceable values. The parameter should be a number to indicate the index position.
 
-### 0 - Property Slot Index
-The property slot index indicates which property slot the following property and/or value should use.
-
+14 and 15 are reserved for extensions, and no number above 15 can be represented with the tokens since the stop bit is used to distinguish from type 7.
 
 ### 7 - Sequence (and Block)
 A sequence is used to create objects and arrays that consist of multiple values. For an accompanying number of 14 or less, the accompanying number indicates the number of values should be read after this token, for this sequence. Alternately, an accompanying number of 15 indicates the start of an open sequence, which should be read as a sequence value until the End Sequence token is encountered.
+
+### 0 - Property Slot Index
+The property slot index indicates which property slot the following property and/or value should use.
 
 This defines the parsing of dpack into rudimentary sequences, strings, constants, numbers, and property definitions that describes the deserialization of these values. Next the values are converted to their final deserialized form.
 
@@ -100,7 +120,7 @@ A token of <3, 0> (type) would parse to `null`.
 
 Tokens of <3, 9> <2, 3> "age" would parse to create a numeric property, with key name of "age", denoted as `number-property: "age"` for this specification.
 
-A token of <0, 3> would parse to be a property slot index of 3, denoted as `property-slot: 3` for this specification.
+A token of <0, 3> would parse to be a property slot index of 3, denoted as `property-slot-3` for this specification.
 
 A token of <7, 2> would parse to indicate a sequence of length of 2, denoted as `sequence-2 [ value, value ]` for this specification.
 
@@ -110,7 +130,7 @@ Tokens of <7, 3> <3, 0> <1, 3> <3, 2> would parse to a sequence of three values:
 Structuring is the conversion of the rudimentary value, sequences, and property definitions into final usable data structures.
 
 ### Property Definitions
-Properties are the central entity that describes how rudimentary values are deserialized into final data structures. Every rudimentary value that is parsed should have an associated property to determine its final value. The first value in dpack document or stream uses the the root property which is the default type. Again, property definition has a `type` code of 3, and the accompanying number defines the type of property that will be created, which will then be used to define how the values will be converted. A property defines how a corresponding value is converted to its final value. The property type definitions with more detail are (by property code) are:
+Properties are the central entity that describes how rudimentary values are deserialized into final data structures. Every rudimentary value that is parsed should have an associated property to determine its final value. A property has a type and a key (and potentially child properties and referenceable values). The first value in dpack document or stream uses the the root property which is the default type. Again, property definition has a token type code of 3, and the accompanying number defines the  property type that will be created, which will then be used to define how the values will be converted. A property defines how a corresponding rudimentary value is converted to its final value. The property type definitions with more detail are (by property code) are:
 6 - Default property type:  Number and constant values are preserved (null, true, false, and numbers), strings are preserved, and sequences are converted to structured objects.
 7 - Array property type: All values are handled the same as default, except a sequence of values should be interpreted as an array of values.
 8 - Referencing property type: The property definition holds an array of referenceable values. Values are handled the same as default except that strings and sequences are stored in the next slot in the values array, and numbers are interpreted as a reference to a value by index position (starting at 0). For example, a number of 1 is a reference to the second value (string or sequence) that had been for this property should be used as the value. A reference can be a forward reference as well.
@@ -152,7 +172,8 @@ The first token indicates we are starting a sequence; since the root property is
 }
 
 
-### Property slot index
+### Property Slot Index
+
 
 ### Structured Objects
 By default, sequences are converted (except in the case of values converted with the Array property type). Sequences are converted to objects by iterating through the sequence. Each value in the sequence *should* have a property defined for the value, and the property's key is used to determine what property name in the parent object to apply each value to. The property for each value in the sequence may have a string key or numeric key. If the key is `null` this means that object should be replaced by the value. A property with a key of `undefined` should not be applied to the object (should not produce a property on the resulting object).
