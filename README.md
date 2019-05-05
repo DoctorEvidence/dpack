@@ -1,6 +1,6 @@
-# dpack
+# DPack
 
-dpack is a very compact binary format for serializing data structures, designed for efficient, high-performance serialization/parsing, and optimized for web use. For common large data structures in applications, a dpack file is often much smaller than JSON (and much smaller than MsgPack as well), and can be parsed faster than JSON and other formats. dpack leverages structural reuse to reduce size, and uses binary format for performance. dpack has several key features:
+DPack is a very compact binary format for serializing data structures, designed for efficient, high-performance serialization/parsing, and optimized for web use. For common large data structures in applications, a dpack file is often much smaller than JSON (and much smaller than MsgPack as well), and can be parsed faster than JSON and other formats. dpack leverages structural reuse to reduce size, and uses binary format for performance. dpack has several key features:
 * Uses internal referencing and reuse of structures, properties, values, and objects for remarkably compact serialization and fast parsing.
 * Defined as a valid unicode character string, which allows for single-pass text decoding for faster and simpler decoding (particulary in browser), support across older browsers, and ease of manipulation as a character string. It  can also be encoded in UTF-8, UTF-16, or any ASCII compatible encoding.
 * Supports a wide range of types including strings, decimal-based numbers, booleans, objects, arrays, dates, maps, sets, and user-provided classes/types.
@@ -97,19 +97,21 @@ The next five codes are used indicate the creation of a property, the next value
 * 10 ("z") - Reserved for extensions
 * 11 ("{") - Reserved for extensions
 
-The next four codes are used indicate modification of the current property. Again, the parser should read the next value, as the parameter for the property modification. This may be used to modify a previously defined property, providing additional information about the property:
-12 ("|") - Metadata - Provides metadata for a property, like a class that should be used for value instances.
-13 ("}") - Referencing position - This can be used with a Referencing property type, to reset the current index into the set of referenceable values. The parameter should be a number to indicate the index position.
+The next four codes are used indicate to modification of the current property. Again, the parser should read the next value, as the parameter for the property modification. This may be used to modify a previously defined property, providing additional information about the property:
+12 ("}") - Type/structure information - The parameter of this 
+
+This can be used with a Referencing property type, to reset the current index into the set of referenceable values. The parameter should be a number to indicate the index position.
+13 ("|") - Metadata - Provides metadata for a property, like a class that should be used for value instances.
 
 14 and 15 are reserved for extensions, and no number above 15 can be represented with the tokens since the stop bit is used to distinguish from type 7.
 
 ### 7 - Sequence (and Block)
-A sequence is used to create objects and arrays that consist of multiple values. For an accompanying number of 14 or less, the accompanying number indicates the number of values should be read after this token, for this sequence. Alternately, an accompanying number of 15 indicates the start of an open sequence, which should be read as a sequence value until the End Sequence token is encountered.
+A sequence is used to create objects and arrays that consist of multiple values. For an accompanying number of 14 or less, the accompanying number indicates the number of values should be read after this token, for this sequence. Alternately, an accompanying number of 15 indicates the start of an open sequence, which should be read as a sequence of values until the End Sequence token is encountered.
 
 ### 0 - Property Slot Index
-The property slot index indicates which property slot the following property and/or value should use.
+The property slot index indicates which property slot the following property and/or value should use. The next value (the parameter) should be interpreted as the index position.
 
-This defines the parsing of dpack into rudimentary sequences, strings, constants, numbers, and property definitions that describes the deserialization of these values. Next the values are converted to their final deserialized form.
+This defines the parsing of dpack into rudimentary sequences, strings, constants, numbers, and property definitions that describes the deserialization of these values. Next the values are converted to their final structured deserialized form.
 
 ### Examples of parsing tokens to rudimentary values
 A token of <1, 2> (number) would parse to a plain integer `2`.
@@ -173,6 +175,7 @@ The first token indicates we are starting a sequence; since the root property is
 
 
 ### Property Slot Index
+The property slot index indicates which property slot the following property and/or value should use. By default, the property index starts at 0 when a sequence beings, and for objects structurs increments for each property/value (no auto-incrementation for arrays) in the sequence, but with the property slot index, the accompanying number explicitly indicates the current property index. This can be followed by a property to define a property at specific index slot in the child properties, and/or can be followed by value to use the property at a specific index. When the index is updated with this, the index can continue to auto-increment from the new position (or stay in the new position for arrays).
 
 
 ### Structured Objects
