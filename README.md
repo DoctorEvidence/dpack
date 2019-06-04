@@ -87,17 +87,17 @@ The first six accompanying number codes are for defining special constant values
 * 5 ("u") - `undefined` (used as value to indicate a property should be omitted)
 
 The next 10 codes are property definition codes. The parser needs to read the next value after this token as the parameter for the property that is being created or modified.
-The next four codes are used to define the kye property, the next value after this token is the *key* that is associated with this property. The codes below indicate which property type to be created (and each type defines how the rudimentary values are converted to final values):
+The first property definition codes are property creation definitions, which define a new property for the current slot. The property definition code can be followed by the value/parameter which defines the *key* that is associated with this property. The value/parameter that defines the key can be elided; if the property code is followed by a sequence or another property definition token, the key is not specified and defaults to `null`. The codes below indicate which property type to be created (and each type defines how the rudimentary values are converted to final values):
 * 6 ("v") - Default property type
 * 7 ("w") - Array property type
 * 8 ("x") - Referencing property type
 * 9 ("y") - Numeric property type
-* 10 - Reserved
-The next three codes are used indicate to other types of modification to the current property. Again, the parser should read the next value. The next value is the parameter for the property modification. This may be used to modify a previously defined property, providing additional information about the property:
-* 11 ("z") - Metadata - Provides metadata for a property, like a class name/converter that should be used for to transform values instances of specific classes.
-* 12 ("{") - Copy property - The parameter should be a number or null, and a number indicates index position of the property that should be copied into this property. A null indicates that the parent of this property should be copied into this property. This is a shallow copy; the source property's type, key, parent, and array of child properties should be copied, but afterwards the target property should have a pointer or reference to the source's child properties. Multiple copy-properties can be sequentially applied to a single property slot to access grandparents and grandchild properties. A copy-property with a null parameter that is followed by a copy-property token can be collapsed to two consecutive copy-property tokens, omitting the null.
-* 13 ("}") - Set Referencing Position - The parameter/value should be a number, and the current property should be a referencing property, this resets the index position in the set of referenceable values, for the addition of future strings and sequences.
-* 14 ("|") - Type definition - The parameter can be used to define the property's child properties. The parameter value should be read using the current property, so a sequence of property definitions will populate the child properties. The value returned has no effect or meaning, this used for parsing an object structure without having to return a value (the actual value/object instance can be parsed as the next value after the property).
+* 10 - ("z") - Binary property type
+The next three codes are used indicate to other types of modification to the current property. Again, the parser should read the next value. The next value is the parameter for the property modification, and in this case any type of token/value should be treated as the parameter. This may be used to modify a previously defined property, providing additional information about the property:
+* 11 ("{") - Metadata - Provides metadata for a property, like a class name/converter that should be used for to transform values instances of specific classes.
+* 12 ("|") - Copy property - The parameter should be a number or null, and a number indicates index position of the property that should be copied into this property. A null indicates that the parent of this property should be copied into this property. This is a shallow copy; the source property's type, key, parent, and array of child properties should be copied, but afterwards the target property should have a pointer or reference to the source's child properties. Multiple copy-properties can be sequentially applied to a single property slot to access grandparents and grandchild properties. A copy-property with a null parameter that is followed by a copy-property token can be collapsed to two consecutive copy-property tokens, omitting the null.
+* 13 ("}") - Set Referencing Position - The parameter/value should be a number, and the current property should be a referencing property, this resets the index position in the set of referenceable values, for the addition of future strings and sequences. If the value is `null`, the position index is set to null, and future strings and sequences should not be added to the set of referenceable values (until the position is reset to a number).
+* 14 ("\~") - Type definition - The parameter can be used to define the property's child properties. The parameter value should be read using the current property, so a sequence of property definitions will populate the child properties. The value returned has no effect or meaning, this used for parsing an object structure without having to return a value (the actual value/object instance can be parsed as the next value after the property).
 * 15 - Reserved
 (No number above 15 can be represented with the tokens since the stop bit is used to distinguish from type 7.)
 
@@ -136,10 +136,18 @@ Structuring is the conversion of the rudimentary value, sequences, and property 
 
 ### Property Definitions
 Properties are the central entity that describes how rudimentary values are deserialized into final data structures. Every rudimentary value that is parsed should have an associated property to determine its final value. A property has a type and a key (and potentially child properties and referenceable values). The first value in dpack document or stream uses the the root property which is the default type. Again, property definition has a token type code of 3, and the accompanying number defines the  property type that will be created, which will then be used to define how the values will be converted. A property defines how a corresponding rudimentary value is converted to its final value. The property type definitions with more detail are (by property code) are:
-6 - Default property type:  Number and constant values are preserved (null, true, false, and numbers), strings are preserved, and sequences are converted to structured objects.
-7 - Array property type: All values are handled the same as default, except a sequence of values should be interpreted as an array of values.
-8 - Referencing property type: The property definition holds an array of referenceable values. Values are handled the same as default except that strings and sequences are stored in the next slot in the values array, and numbers are interpreted as a reference to a value by index position (starting at 0). For example, a number of 1 is a reference to the second value (string or sequence) that had been for this property should be used as the value. A reference can be a forward reference as well.
-9 - Numeric property type: All values are handled the same as default except that strings should be parsed as a number, following the same rules as JSON. For example, a string of "23.41" should be interpreted as the number `23.41`.
+
+#### 6 - Default property type
+Number and constant values are preserved (null, true, false, and numbers), strings are preserved, and sequences are converted to structured objects.
+
+#### 7 - Array property type
+All values are handled the same as default, except a sequence of values should be interpreted as an array of values.
+
+#### 8 - Referencing property type
+The property definition holds an array of referenceable values. Values are handled the same as default except that strings and sequences are stored in the next slot in the values array, and numbers are interpreted as a reference to a value by index position (starting at 0). For example, a number of 1 is a reference to the second value (string or sequence) that had been for this property should be used as the value. A reference can be a forward reference as well. When a property is defined or redefined using the referencing property type, the index position is set (or reset) to zero.
+
+#### 9 - Numeric property type
+All values are handled the same as default except that strings should be parsed as a number, following the same rules as JSON. For example, a string of "23.41" should be interpreted as the number `23.41`.
 
 ### Structured Objects
 By default, sequences are converted (except in the case of values converted with the Array property type). Sequences are converted to objects by iterating through the sequence. Each value in the sequence *should* have a property defined for the value, and the property's key is used to determine what property name in the parent object to apply each value to. The property for each value in the sequence may have a string key or numeric key.
@@ -162,7 +170,7 @@ The first token indicates we are starting a sequence; since the root property is
 }
 ```
 
-
+Here is more complicated example where a `friends` array property is defined, which then specifies a default property for interpreting the elements of the array. The first element of the array is a sequence which specifies properties `name` and `age`. And then the second element of the array will be interpreted using the same property as the first element, and therefore the same child property slots are already defined (first slot is `name`, second is `age`), so the sequence can interpreted without definining properties again:
 `sequence-1 [ array-property: "friends" sequence-2 [
 	default-property: null sequence-2 [ default-property: "name" "John", numeric-property: "age" 33 ]
 	sequence-2 [ "Sarah", 29 ] ] ]`
@@ -184,16 +192,17 @@ The property slot index indicates which property slot the following property and
 
 
 ### Arrays
-Like structured objects, arrays are created from sequences. 
-A property with a key of `null` indicates that the value should be appended as the next value in the array.
+Like structured objects, arrays are created from sequences. When sequence when the current property is an array type, the seequence is to be interpreted as an array. Within an array sequence, a property with a key of `null` indicates that the value should be appended as the next value in the array. If no properties are defined within an array sequence, the array sequence should default to interpreting the values with the default property type, as if a key of `null` where each value is added to the array.
 
 ### Blocks
 At the top level of a dpack document or stream, the serialization of a single root value (which may be a complex object with arbitrary size) is a "block". However, a document/stream may have multiple sequential blocks. The first block of the document is the root object/value, but there may be a queue of additional blocks that need to be parsed from deferred references. The blocks are simply dpack values in sequential order (with no delimiters). These are parsed in order as defined by the queuing of the deferred references.
 
 ### Deferred References
-Deferred references allow the serialized representation of an object to be deferred or moved to a later point in a dpack document so that a parser can parse and deserialize that object later. This can be valuable mechanism for allowing a parent object to be parsed, while deferring the parsing of a child object until necessary, and can improve the utility of progressive parsers.
+Deferred references allow the serialized representation of an object to be deferred or moved to a later point in a dpack document so that a parser can parse and deserialize that object later. This can be valuable mechanism for allowing a parent object to be parsed, while deferring the parsing of child objects until necessary, and can improve the utility of progressive parsers.
 
-A deferred reference is represented by the single token/character <3, 2> ("r"). The parser should interpret this as a placeholder for a future object. And the parser should queue up this object to be read/deserialized as a block in the parsing queue in this order: The block for the deferred reference should come *after* all the deferred reference blocks from this block, but *before* all deferred reference blocks from any previous blocks. This ensures that a block can be contiguous with all the blocks for its own deferred references, even if that block is referenced by (deferred references in) other blocks.
+A deferred reference is represented by the single token/character <7, 15> ("?"). The parser should interpret this as a placeholder for a future object. And the parser should queue up this object to be read/deserialized as a block in the parsing queue in this order: The block for the deferred reference should come *after* all the deferred reference blocks from this block, but *before* all deferred reference blocks from any previous blocks. This ensures that a block can be contiguous with all the blocks for its own deferred references, even if that block is referenced by (deferred references in) other blocks.
+
+When the block is parsed, the root/beginning of the block should be interpreted using the current property when the deferred reference was read.
 
 ### Metadata
 The metadata type allows additional information to be encoded in a property for the purposes of deserialization. This can include any type of extra metadata to describe the property. However, a metadata parameter that is a string should be interpreted as an indication of the name of the type or class that the value should be deserialized into. A structured object that is read with a property with metadata should generally result in the properties being applied to the properties of an instance of the class or type described by the string.
